@@ -1,7 +1,7 @@
 # Inter-process communication
 
-Intriguing repository clone of Discord's RPC IPC communication channel.
-I'm trying to delve into the reverse engineering and ingeniously clone the 
+Intriguing repository re-implement of Discord's RPC IPC communication channel.
+I'm trying to delve into the reverse engineering and ingeniously implement the 
 enigmatic pathways that facilitate communication in the Discord.
 
 ## What is IPC?
@@ -19,3 +19,11 @@ Reference from [Linux kernel IPC](https://tldp.org/LDP/tlk/ipc/ipc.html) [System
 ![](./assets/ipc-explain.png)
 
 (TBU)
+
+## References
+
+- https://en.wikipedia.org/wiki/Inter-process_communication
+- https://tldp.org/LDP/tlk/ipc/ipc.html
+- https://dwheeler.com/secure-programs/Secure-Programs-HOWTO/sysv-ipc.html
+- https://discord.com/developers/docs/topics/rpc
+- https://github.com/discordjs/RPC/
