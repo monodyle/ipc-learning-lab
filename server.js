@@ -1,5 +1,6 @@
 'use strict'
 import net from 'node:net'
+import crypto from 'node:crypto'
 
 const ipcPath = `\\\\?\\pipe\\ipc-0`
 
@@ -21,10 +22,23 @@ function decode (packet) {
   return { op, data }
 }
 
+function encode (op, data) {
+  data = JSON.stringify(data)
+  const len = Buffer.byteLength(data)
+  const packet = Buffer.alloc(8 + len)
+  packet.writeInt32LE(op, 0)
+  packet.writeInt32LE(len, 4)
+  packet.write(data, 8, len)
+  return packet
+}
+
 const server = net.createServer(socket => {
   socket.on('data', data => {
     if (Buffer.isBuffer(data)) {
-      console.log('receive data:', decode(data))
+      const result = decode(data)
+      console.log('receive data:', result)
+      socket.write(encode(0, { message: 'Hello, ' + result.data.clientId }))
+      socket.write(encode(1, { instance: crypto.randomUUID() }))
       return
     }
     console.log('received data (not a buffer):', data)

@@ -1,6 +1,8 @@
 'use strict'
 import net from 'node:net'
 
+const [_, __, clientId] = process.argv
+
 function getIPC () {
   return new Promise((resolve, reject) => {
     const path = `\\\\?\\pipe\\ipc-0`
@@ -14,6 +16,24 @@ function getIPC () {
     })
     sock.once('error', onerror)
   })
+}
+
+/**
+ * @typedef {Object} MessageInstruction
+ * @property {number}  op    operation code
+ * @property {Object}  data  data payload
+ */
+
+/**
+ * decode packet content
+ * @param {Buffer} packet
+ * @returns {MessageInstruction}
+ */
+function decode (packet) {
+  const op = packet.readInt32LE(0)
+  const len = packet.readInt32LE(4)
+  const data = JSON.parse(packet.toString('utf8', 8, 8 + len))
+  return { op, data }
 }
 
 function encode (op, data) {
@@ -31,8 +51,9 @@ function encode (op, data) {
  */
 const handleSocket = socket => {
   socket.write(
-    encode(0, { clientId: "nodejs" })
+    encode(0, { clientId: clientId || "nodejs" })
   )
+  socket.on('data', (data) => console.log(decode(data)))
 }
 
 getIPC().then(handleSocket)

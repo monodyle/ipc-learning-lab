@@ -1,46 +1,58 @@
-use byteorder::{LittleEndian, WriteBytesExt};
-use serde_json::json;
-use std::fs::File;
-use std::io::{Error, Write};
-use std::os::windows::io::FromRawHandle;
-use std::ptr;
-use winapi::um::fileapi::CreateFileA;
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-use winapi::um::winbase::WaitNamedPipeA;
-use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE};
+use bytes::{BufMut, BytesMut};
+use serde_json::Value;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
 
-fn encode(op: i32, data: &serde_json::Value) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let data = serde_json::to_string(data)?;
-    let len = data.len();
-    let mut packet = vec![0; 8 + len];
-    (&mut packet[0..4]).write_i32::<LittleEndian>(op)?;
-    (&mut packet[4..8]).write_i32::<LittleEndian>(len as i32)?;
-    packet[8..].copy_from_slice(data.as_bytes());
-    Ok(packet)
+#[derive(Debug)]
+pub struct MessageInstruction {
+    op: i32,
+    data: Value,
 }
 
-fn main() -> Result<(), Error> {
-    unsafe {
-        let name = std::ffi::CString::new(r"\\?\pipe\ipc-0").unwrap();
-        WaitNamedPipeA(name.as_ptr(), 30000);
-        let handle = CreateFileA(
-            name.as_ptr(),
-            GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            ptr::null_mut(),
-            3,
-            0,
-            ptr::null_mut(),
+async fn get_ipc() -> NamedPipeClient {
+    let path = r"\\.\pipe\ipc-0";
+    println!("getIPC {}", path);
+    let stream = ClientOptions::new().open(path).unwrap();
+    stream
+}
+
+fn decode(packet: &[u8]) -> MessageInstruction {
+    let op = i32::from_le_bytes([packet[0], packet[1], packet[2], packet[3]]);
+    let len = i32::from_le_bytes([packet[4], packet[5], packet[6], packet[7]]) as usize;
+
+    let data: Value = serde_json::from_slice(&packet[8..8 + len]).unwrap();
+    MessageInstruction { op, data }
+}
+
+fn encode(op: i32, data: Value) -> Vec<u8> {
+    let mut packet = BytesMut::with_capacity(8);
+    packet.put_i32_le(op);
+    let data = serde_json::to_vec(&data).unwrap();
+    packet.put_i32_le(data.len() as i32);
+    packet.put_slice(&data);
+    packet.to_vec()
+}
+
+#[tokio::main]
+async fn main() {
+    let mut stream = get_ipc().await;
+
+    let message = serde_json::json!({
+        "clientId": "rust"
+    });
+
+    let encoded_message = encode(0, message);
+    stream.write_all(&encoded_message).await.unwrap();
+
+    loop {
+        let mut buffer = vec![0; 1024];
+        stream.read(&mut buffer).await.unwrap();
+
+        let message = decode(&buffer);
+
+        println!(
+            "message: {:?}\nop: {:?}\ndata: {:?}\n",
+            message, message.op, message.data
         );
-
-        if handle == INVALID_HANDLE_VALUE {
-            return Err(Error::last_os_error());
-        }
-
-        let mut file = File::from_raw_handle(handle as _);
-
-        file.write_all(&encode(0, &json!({ "clientId": "rust" })).unwrap())?;
     }
-
-    Ok(())
 }
